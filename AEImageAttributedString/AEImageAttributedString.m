@@ -81,12 +81,7 @@ static NSString *kAEImageAttributeName = @"kAEImageAttributeName";
     CGRect rect = CGPathGetBoundingBox(CTFrameGetPath(frame));
     CFArrayRef lines = CTFrameGetLines(frame);
     
-    // Flip the CTM. We assume that the CTM is *currently* the Core Text/Mac 
-    // style, with the origin in bottom left. UIImage uses a top left origin.
-    // If we don't flip the CTM, images will be drawn upside down.
     CGContextRef c = UIGraphicsGetCurrentContext();
-    CGContextSaveGState(c);
-    CGContextConcatCTM(c, CGAffineTransformMake(1.0, 0.0, 0.0, -1.0, 0.0, rect.origin.y + rect.size.height));
     
     [string enumerateAttribute:(id)kAEImageAttributeName 
                        inRange:NSMakeRange(0, [string length]) 
@@ -94,25 +89,26 @@ static NSString *kAEImageAttributeName = @"kAEImageAttributeName";
                     usingBlock:^(id value, NSRange range, BOOL *stop) {
                         UIImage *image = (UIImage *) value;
                         
-                        CGFloat x = 0.0f;
-                        CGFloat y = 0.0f;
+                        CGRect imageRect = {
+                            .origin = rect.origin,
+                            .size = [image size],
+                        };
                         
                         for (CFIndex i = 0; i < CFArrayGetCount(lines); i++) {
                             CTLineRef line = CFArrayGetValueAtIndex(lines, i);
                             CFRange r = CTLineGetStringRange(line);
                             int localIndex = range.location - r.location;
                             if (localIndex >= 0 && localIndex < r.length) {
-                                x = CTLineGetOffsetForStringIndex(line, range.location, NULL);
+                                imageRect.origin.x += CTLineGetOffsetForStringIndex(line, range.location, NULL);
                                 CGPoint lineOrigin;
                                 CTFrameGetLineOrigins(frame, CFRangeMake(i, 1), &lineOrigin);
-                                y = lineOrigin.y;
+                                imageRect.origin.y += lineOrigin.y - 2.0f;
                                 break;
                             }
                         }
-                        [image drawAtPoint:CGPointMake(rect.origin.x + x, rect.size.height - y - [image size].height + 2.0f)];
+                        
+                        CGContextDrawImage(c, imageRect, [image CGImage]);
                     }];
-    
-    CGContextRestoreGState(c);
 }
 
 @end
